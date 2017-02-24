@@ -1,6 +1,6 @@
 package spider
 
-import java.util.Date
+import java.util.Calendar
 
 case class FarmRecord(
   name: String,
@@ -9,4 +9,4 @@ case class FarmRecord(
   market: String,
   region: String,
   infoSource: String,
-  date: Date)
+  date: Calendar)
