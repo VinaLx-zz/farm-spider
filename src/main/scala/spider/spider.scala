@@ -4,6 +4,9 @@ import java.net.HttpCookie
 import scalaj.http._
 import scala.io.Source
 
+/**
+ * state monad
+ */
 case class Spider[S, +A](run: S ⇒ (A, S)) {
 
   import Spider._
@@ -27,7 +30,6 @@ case class Spider[S, +A](run: S ⇒ (A, S)) {
     val (a, s1) = run(s)
     (a, f(s1))
   }
-
 }
 
 object Spider {
@@ -35,6 +37,13 @@ object Spider {
 
   def getState[S]: Spider[S, S] = Spider[S, S](s ⇒ (s, s))
   def setState[S](s: S) = Spider[S, Unit](_ ⇒ ((), s))
+
+  def changeState[S](f: S ⇒ S): Spider[S, Unit] = {
+    for {
+      state ← getState[S]
+      _ ← setState(f(state))
+    } yield ()
+  }
 
   def sequence[S, A](as: IndexedSeq[Spider[S, A]]): Spider[S, IndexedSeq[A]] = {
     as.foldLeft(unit[S, IndexedSeq[A]](IndexedSeq.empty)) { (acc, sa) ⇒
