@@ -19,7 +19,7 @@ trait Spider[S, +A] {
     flatMap(a ⇒ unit(f(a)))
   }
 
-  def map2[B, C](sb: Spider[S, B])(f: (A, B) ⇒ C): Spider[S, C] = {
+  def map2[B, C](sb: ⇒ Spider[S, B])(f: (A, B) ⇒ C): Spider[S, C] = {
     flatMap(a ⇒ sb map (b ⇒ f(a, b)))
   }
 }
@@ -65,9 +65,16 @@ object Spider {
       acc.map2(sa)(_ :+ _)
     }
   }
+
   def sequence[S, A](as: List[Spider[S, A]]): Spider[S, List[A]] = {
     as.foldRight(unit[S, List[A]](Nil)) { (sa, acc) ⇒
       sa.map2(acc)(_ :: _)
+    }
+  }
+
+  def sequence[S, A](as: Stream[Spider[S, A]]): Spider[S, Stream[A]] = {
+    as.foldRight(unit[S, Stream[A]](Stream.empty[A])) { (sa, acc) ⇒
+      sa.map2(acc)(_ #:: _)
     }
   }
 

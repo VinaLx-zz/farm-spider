@@ -178,10 +178,10 @@ object Combinators {
   }
 
   def getProductIdsFromCategoryId(
-    parentId: Int): Spider3w3n[IndexedSeq[(Int, String)]] = {
+    categoryId: Int): Spider3w3n[IndexedSeq[(Int, String)]] = {
     Spider.get[State3w3n](
       URLs.BASE + URLs.SHOW_TYPE_LIST)(
-        params = List("pId" -> parentId.toString))
+        params = List("pId" -> categoryId.toString))
       .map(resp ⇒ parseTypeListJson(resp.body))
   }
 
@@ -190,10 +190,14 @@ object Combinators {
    */
   def getProductsAndSink(
     productIds: Seq[(Int, String)], period: Interval = trivialInterval) = {
-    val spiderSeq = productIds.view.map { (t: (Int, String)) ⇒
-      getProductOfType(t._1).flatMap(records ⇒ sink(t._2, records))
-    }.toIndexedSeq
-    sequence(spiderSeq).map(_ ⇒ ())
+    val spiderStream = for {
+      date <- (period by[IndexedSeq] 1.day)
+      (id, t) <- productIds 
+    } yield (getProductOfType(id, date) flatMap( records => sink(t, records)))
+    // val spiderSeq = productIds.view.map { (t: (Int, String)) ⇒
+    //   getProductOfType(t._1).flatMap(records ⇒ sink(t._2, records))
+    // }.toIndexedSeq
+    sequence(spiderStream).map(_ ⇒ ())
   }
 
   def sink(record: (String, IndexedSeq[ProductTableRecord])): Spider3w3n[Unit] = {
@@ -287,6 +291,27 @@ object TextProcessing {
             date = date)
       }
     recordList.toIndexedSeq
+  }
+
+  def main(args: Array[String]): Unit = {
+    if (args.size < 2) {
+      println("usage: run <username> <password> [period]")
+      return ()
+    }
+    val user = User(args(0), args(1))
+    val currentTime = DateTime.now
+
+    val d = if (args.size == 3) args(2).toInt - 1 else 0
+    val interval = (currentTime - d.day) to currentTime
+
+    val tag = WorkerTag(1, 1)
+
+    val start = System.currentTimeMillis
+    val s = startOne(user, tag, interval)
+    s run State3w3n()
+    val end = System.currentTimeMillis
+    println(s"spend ${(end - start).toDouble / 1000} seconds for  days records")
+
   }
 }
 
