@@ -2,7 +2,7 @@ package spider.util
 
 import java.security.MessageDigest
 import java.text.SimpleDateFormat
-import java.util.Calendar
+import com.github.nscala_time.time.Imports._
 import scala.math.ceil
 
 object MD5Hash {
@@ -12,16 +12,15 @@ object MD5Hash {
   }
 }
 
-object StringToCalendar {
-  def apply(p: String)(s: String): Calendar = {
-    val cal = Calendar.getInstance
-    cal.setTime(new SimpleDateFormat(p).parse(s))
-    cal
+object DateTimeUtil {
+  def fromFormatString(date: String, format: String): DateTime = {
+    DateTimeFormat.forPattern(format).parseDateTime(date)
   }
-}
-
-object CalendarToString {
-  def apply(cal: Calendar, p: String = "yyyy-MM-dd"): String = {
-    new SimpleDateFormat(p).format(cal.getTime)
+  def toFormatString(date: DateTime, format: String = "yyyy-MM-dd"): String = {
+    DateTimeFormat.forPattern(format).print(date)
+  }
+  def trivialInterval: Interval = {
+    val date = DateTime.now
+    date to date
   }
 }
