@@ -69,10 +69,10 @@ case class ProductTableRecord(
   name: String,
   price: Double,
   market: String,
-  infoSource: String,
+  // infoSource: String,
   date: Calendar) {
   override def toString: String = {
-    s"$name - $price - $market - $infoSource - ${CalendarToString(date)}"
+    s"$name - $price - $market  - ${CalendarToString(date)}"
   }
 }
 
@@ -172,8 +172,8 @@ object Combinators {
    */
   def getProductsAndSink(productIds: Seq[(Int, String)]) = {
     val spiderSeq = productIds.view.map { (t: (Int, String)) ⇒
-      getProductOfType(t._1).map(records ⇒ (t._2, records))
-    }.map(_ flatMap (record ⇒ sink(record))).toIndexedSeq
+      getProductOfType(t._1).flatMap(records ⇒ sink(t._2, records))
+    }.toIndexedSeq
     sequence(spiderSeq).map(_ ⇒ ())
   }
 
@@ -258,13 +258,14 @@ object TextProcessing {
       table.tail map (_ >> texts("td")) map {
         (fields: Iterable[String]) ⇒
           val cols = fields.toIndexedSeq
+          println(cols)
           val price = cols(1).trim.split("""[^\d\.]""", 2)(0).toDouble
-          val date = StringToCalendar("yyyy-MM-dd")(cols(4))
+          val date = StringToCalendar("yyyy-MM-dd")(cols(3))
           ProductTableRecord(
             name = cols(0),
             price = price,
             market = cols(2),
-            infoSource = cols(3),
+            // infoSource = cols(3),
             date = date)
       }
     recordList.toIndexedSeq
