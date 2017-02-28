@@ -3,6 +3,7 @@ package spider
 import java.net.HttpCookie
 import scalaj.http._
 import scala.io.Source
+import scala.concurrent._
 
 /**
  * state monad
@@ -89,6 +90,16 @@ object Spider {
     headers: Seq[(String, String)] = Nil,
     cookies: Seq[HttpCookie] = Nil) = unit[S, HttpResponse[String]] {
     Http(url).params(params).headers(headers).cookies(cookies).asString
+  }
+
+  def getAsync[S](url: String)(
+    params: Seq[(String, String)] = Nil,
+    headers: Seq[(String, String)] = Nil,
+    cookies: Seq[HttpCookie] = Nil)(
+      implicit ec: ExecutionContext) = unit[S, Future[HttpResponse[String]]] {
+    Future {
+      Http(url).params(params).headers(headers).cookies(cookies).asString
+    }(ec)
   }
 
 }

@@ -50,16 +50,6 @@ case class ProductTableParam(
   }
 }
 
-case class WorkerTag(index: Int, total: Int) {
-  def toIndexRange(jobs: Int): (Int, Int) = {
-    val chunk = jobs.toDouble / total
-    // avoid round off error
-    if (index == 1) (0, floor(chunk).toInt)
-    else if (index == total) (floor(jobs - chunk).toInt, jobs)
-    else (floor((index - 1) * chunk).toInt, floor(index * chunk).toInt)
-  }
-}
-
 case class User(username: String, password: String)
 
 case class State3w3n(
@@ -67,7 +57,6 @@ case class State3w3n(
   cookies: Seq[HttpCookie] = Nil,
   categoryIds: IndexedSeq[Int] = IndexedSeq.empty[Int],
   typeIds: IndexedSeq[(Int, String)] = IndexedSeq.empty[(Int, String)],
-  tag: WorkerTag = WorkerTag(index = 1, total = 1),
   user: Option[User] = None,
   period: Interval = trivialInterval)
 
@@ -89,15 +78,12 @@ object Combinators {
 
   def startOne(
     user: User,
-    tag: WorkerTag = WorkerTag(1, 1),
     period: Interval = trivialInterval): Spider3w3n[Unit] = {
     for {
-      _ ← setWorkerTag(tag)
       _ ← setPeriod(period)
       _ ← init(user)
       state ← getState[State3w3n]
-      (start, end) = state.tag.toIndexRange(state.typeIds.size)
-      _ ← getProductsAndSink(state.typeIds.view.slice(start, end), period)
+      _ ← getProductsAndSink(state.typeIds, period)
     } yield ()
   }
 
@@ -107,8 +93,8 @@ object Combinators {
       _ ← setUser(user)
       _ ← setHashAndCategoryIds
       state ← getState[State3w3n]
-      (start, end) = state.tag.toIndexRange(state.categoryIds.size)
-      _ ← setProductIds(state.categoryIds.view.slice(start, end))
+      // TODO: the work should not base on slice of categoryIds
+      _ ← setProductIds(state.categoryIds)
     } yield ()
   }
 
@@ -124,9 +110,6 @@ object Combinators {
   object Setters {
     def setUser(user: User): Spider3w3n[Unit] = {
       changeState(_.copy(user = Some(user)))
-    }
-    def setWorkerTag(tag: WorkerTag): Spider3w3n[Unit] = {
-      changeState(_.copy(tag = tag))
     }
 
     def setPeriod(period: Interval): Spider3w3n[Unit] = {
@@ -191,12 +174,10 @@ object Combinators {
   def getProductsAndSink(
     productIds: Seq[(Int, String)], period: Interval = trivialInterval) = {
     val spiderStream = for {
+      // TODO: compute period lazily without stack overflow
       date <- (period by[IndexedSeq] 1.day)
       (id, t) <- productIds 
     } yield (getProductOfType(id, date) flatMap( records => sink(t, records)))
-    // val spiderSeq = productIds.view.map { (t: (Int, String)) ⇒
-    //   getProductOfType(t._1).flatMap(records ⇒ sink(t._2, records))
-    // }.toIndexedSeq
     sequence(spiderStream).map(_ ⇒ ())
   }
 
@@ -219,10 +200,12 @@ object Combinators {
       val params = ProductTableParam(
         pageNo = pageNo, typeId = typeId, date = date)
       val thisPage = getProductRecords(params)
-      acc flatMap (before ⇒ thisPage flatMap { current ⇒
-        if (current.isEmpty) unit(before)
-        else go(unit(before ++ current), pageNo + 1, date)
-      })
+      acc flatMap { before ⇒ 
+        thisPage flatMap { current ⇒
+          if (current.isEmpty) unit(before)
+          else go(unit(before ++ current), pageNo + 1, date)
+        }
+      }
     }
     go(unit(IndexedSeq.empty), 1, date)
   }
@@ -304,10 +287,8 @@ object TextProcessing {
     val d = if (args.size == 3) args(2).toInt - 1 else 0
     val interval = (currentTime - d.day) to currentTime
 
-    val tag = WorkerTag(1, 1)
-
     val start = System.currentTimeMillis
-    val s = startOne(user, tag, interval)
+    val s = startOne(user, interval)
     s run State3w3n()
     val end = System.currentTimeMillis
     println(s"spend ${(end - start).toDouble / 1000} seconds for  days records")
