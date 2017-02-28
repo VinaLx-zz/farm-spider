@@ -2,44 +2,22 @@ package spider
 package spider3w3n
 
 import Spider._
-import spider.util.MD5Hash
+
 import spider.util.DateTimeUtil.{
   trivialInterval,
-  fromFormatString,
-  toFormatString,
-  splitInterval
+  toFormatString
 }
 
-import scala.math.floor
-import scala.concurrent.{ Future, ExecutionContext, Await }
-import scala.concurrent.duration.Duration.Inf
 // http support
 import java.net.HttpCookie
 import scalaj.http.HttpResponse
-// json parsing
-import org.json4s._
-import org.json4s.JsonDSL._
-import org.json4s.native.JsonMethods
-// html parsing
-import net.ruippeixotog.scalascraper.browser.JsoupBrowser
-import net.ruippeixotog.scalascraper.dsl.DSL._
-import net.ruippeixotog.scalascraper.dsl.DSL.Extract._
+
 // day-time support
 import com.github.nscala_time.time.Imports._
 
 import Combinators._
 import TextProcessing._
-
-object URLs {
-  val BASE = "http://www.3w3n.com/"
-
-  val INDEX = "index/goIndex"
-  val LOGIN = "loginUser"
-  val PRICE_INDEX = "user/price4Day/goIndex"
-  val PRODUCT_TABLE = "user/price4Day/showPriceListPage"
-  val SHOW_STAT = "showPriceCount"
-  val SHOW_TYPE_LIST = "getProductList"
-}
+import Sinker._
 
 case class ProductTableParam(
   pageNo: Int, typeId: Int, date: DateTime = DateTime.now) {
@@ -55,11 +33,6 @@ case class ProductTableParam(
 
 case class User(username: String, password: String)
 
-case class SpiderContext(
-  user: User,
-  categoryIds: IndexedSeq[Int] = IndexedSeq.empty[Int],
-  typeIds: IndexedSeq[(Int, String)] = IndexedSeq.empty[(Int, String)])
-
 case class State3w3n(
   hash: Option[String] = None,
   cookies: Seq[HttpCookie] = Nil,
@@ -67,7 +40,7 @@ case class State3w3n(
   typeIds: IndexedSeq[(Int, String)] = IndexedSeq.empty[(Int, String)],
   user: Option[User] = None)
 
-case class ProductTableRecord(
+case class Record3w3n(
   name: String,
   price: Double,
   market: String,
@@ -79,18 +52,18 @@ case class ProductTableRecord(
 }
 
 object Combinators {
-  type Context[+A] = Spider[SpiderContext, A]
   type Spider3w3n[+A] = Spider[State3w3n, A]
 
   import Setters._
 
-  def startOne(
+  def getSpider(
     user: User,
-    days: IndexedSeq[DateTime]): Spider3w3n[Unit] = {
+    days: IndexedSeq[DateTime],
+    sink: Sinker): Spider3w3n[Unit] = {
     for {
       _ ← init(user)
       state ← getState[State3w3n]
-      _ ← getProductsAndSink(state.typeIds, days)
+      _ ← getProductsAndSink(state.typeIds, days, sink)
     } yield ()
   }
 
@@ -148,7 +121,6 @@ object Combinators {
   def relogin: Spider3w3n[Unit] = {
     for {
       state ← getState[State3w3n]
-      // TODO: Add error handling
       _ ← login(state.user.get)
       page ← getPriceIndexPage
       _ ← setHashFromPage(page)
@@ -175,21 +147,14 @@ object Combinators {
    * @return Spider3w3n[Unit]
    */
   def getProductsAndSink(
-    productIds: Seq[(Int, String)], dates: IndexedSeq[DateTime]) = {
+    productIds: Seq[(Int, String)],
+    dates: IndexedSeq[DateTime],
+    sink: (String, IndexedSeq[Record3w3n]) ⇒ Unit) = {
     val spiderSeq = for {
-      // TODO: compute period lazily without stack overflow
       date ← dates
       (id, t) ← productIds
-    } yield (getProductOfType(id, date) flatMap (records ⇒ sink(t, records)))
+    } yield (getProductOfType(id, date) map (records ⇒ sink.tupled(t, records)))
     sequence(spiderSeq).map(_ ⇒ ())
-  }
-
-  def sink(record: (String, IndexedSeq[ProductTableRecord])): Spider3w3n[Unit] = {
-    def print(record: (String, IndexedSeq[ProductTableRecord])): Unit = {
-      println(record._1)
-      record._2 foreach println
-    }
-    unit(print(record))
   }
 
   /**
@@ -197,9 +162,9 @@ object Combinators {
    */
   def getProductOfType(typeId: Int, date: DateTime = DateTime.now) = {
     def go(
-      acc: Spider3w3n[IndexedSeq[ProductTableRecord]],
+      acc: Spider3w3n[IndexedSeq[Record3w3n]],
       pageNo: Int,
-      date: DateTime): Spider3w3n[IndexedSeq[ProductTableRecord]] = {
+      date: DateTime): Spider3w3n[IndexedSeq[Record3w3n]] = {
       val params = ProductTableParam(
         pageNo = pageNo, typeId = typeId, date = date)
       val thisPage = getProductRecords(params)
@@ -214,16 +179,16 @@ object Combinators {
   }
 
   def getProductRecords(
-    params: ProductTableParam): Spider3w3n[IndexedSeq[ProductTableRecord]] = {
+    params: ProductTableParam): Spider3w3n[IndexedSeq[Record3w3n]] = {
     def handleResponse(
-      resp: HttpResponse[String]): Spider3w3n[IndexedSeq[ProductTableRecord]] = {
+      resp: HttpResponse[String]): Spider3w3n[IndexedSeq[Record3w3n]] = {
       if (resp.isSuccess) unit(parseProductTable(resp.body))
       // if login status expired, relogin and retry
       else if (resp.isRedirect) relogin flatMap (_ ⇒ getProductRecords(params))
       else {
         // shouldn't go here in normal case
         assert(false)
-        (sys.exit(1): Spider3w3n[IndexedSeq[ProductTableRecord]])
+        (sys.exit(1): Spider3w3n[IndexedSeq[Record3w3n]])
       }
     }
     for {
@@ -233,94 +198,5 @@ object Combinators {
         params = params.toSequence :+ ("r" -> state.hash.get))
       res ← handleResponse(resp)
     } yield res
-  }
-
-}
-
-object TextProcessing {
-  private[spider3w3n] def extractHash(page: String): Option[String] = {
-    val extractorRegex = """enc\('(\w+?)'\)""".r
-    extractorRegex findFirstMatchIn page map (_.group(1)) map (MD5Hash(_))
-  }
-
-  private[spider3w3n] def extractCategoryIds(page: String): IndexedSeq[Int] = {
-    val extractorRegex = """getProductListByPid\((\d+),""".r
-    (extractorRegex findAllMatchIn page map (_.group(1).toInt)).toIndexedSeq
-  }
-
-  private[spider3w3n] def parseTypeListJson(
-    j: String): IndexedSeq[(Int, String)] = {
-    (for {
-      JObject(fields) ← JsonMethods.parse(j)
-      JField("id", JInt(id)) ← fields
-      JField("type", JString(name)) ← fields
-    } yield (id, name))
-      .map { case (bigint, name) ⇒ (bigint.intValue, name) }
-      .toIndexedSeq
-  }
-
-  private[spider3w3n] def parseProductTable(
-    page: String): IndexedSeq[ProductTableRecord] = {
-    val table = JsoupBrowser().parseString(page) >> elementList("tr")
-    if (table.isEmpty) return IndexedSeq.empty
-    val recordList =
-      table.tail map (_ >> texts("td")) map {
-        (fields: Iterable[String]) ⇒
-          val cols = fields.toIndexedSeq
-          val price = cols(1).trim.split("""[^\d\.]""", 2)(0).toDouble
-          val date = fromFormatString(cols(3), "yyyy-MM-dd")
-          ProductTableRecord(
-            name = cols(0),
-            price = price,
-            market = cols(2),
-            // infoSource = cols(3),
-            date = date)
-      }
-    recordList.toIndexedSeq
-  }
-}
-
-object Runner {
-  def initSpiders(
-    user: User,
-    period: Interval = trivialInterval,
-    workerNum: Int = 1): List[Spider3w3n[Unit]] = {
-    val datesList = splitInterval(1.day)(period, workerNum)
-    datesList map (dates ⇒ startOne(user, dates.toIndexedSeq))
-  }
-
-  def runSpiderAsync(s: Spider3w3n[Unit])(
-    implicit ec: ExecutionContext): Future[Unit] = Future {
-    s run State3w3n()
-  }
-
-  def go(
-    user: User,
-    period: Interval = trivialInterval,
-    workerNum: Int = 4)(implicit ec: ExecutionContext): List[Future[Unit]] = {
-    initSpiders(user, period, workerNum) map { spider ⇒
-      runSpiderAsync(spider)
-    }
-  }
-
-  def main(args: Array[String]): Unit = {
-    if (args.size < 2) {
-      println("usage: run <username> <password> [period]")
-      return ()
-    }
-    val user = User(args(0), args(1))
-    val currentTime = DateTime.now
-
-    val d = if (args.size == 3) args(2).toInt - 1 else 0
-    val interval = (currentTime - d.day) to currentTime
-
-    val start = System.currentTimeMillis
-    import scala.concurrent.ExecutionContext.Implicits._
-    for {
-      f ← go(user, interval)
-    } Await.result(f, Inf)
-    val end = System.currentTimeMillis
-    println(s"spend ${(end - start).toDouble / 1000} seconds for $d days records")
-
   }
 }

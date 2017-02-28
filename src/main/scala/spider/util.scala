@@ -5,6 +5,7 @@ import java.text.SimpleDateFormat
 import com.github.nscala_time.time.Imports._
 import scala.math.ceil
 import org.joda.time.ReadablePeriod
+import java.io.FileOutputStream
 
 object MD5Hash {
   def apply(s: String): String = {
