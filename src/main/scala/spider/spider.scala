@@ -92,14 +92,4 @@ object Spider {
     Http(url).params(params).headers(headers).cookies(cookies).asString
   }
 
-  def getAsync[S](url: String)(
-    params: Seq[(String, String)] = Nil,
-    headers: Seq[(String, String)] = Nil,
-    cookies: Seq[HttpCookie] = Nil)(
-      implicit ec: ExecutionContext) = unit[S, Future[HttpResponse[String]]] {
-    Future {
-      Http(url).params(params).headers(headers).cookies(cookies).asString
-    }(ec)
-  }
-
 }

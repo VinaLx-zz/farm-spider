@@ -4,6 +4,7 @@ import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import com.github.nscala_time.time.Imports._
 import scala.math.ceil
+import org.joda.time.ReadablePeriod
 
 object MD5Hash {
   def apply(s: String): String = {
@@ -22,5 +23,10 @@ object DateTimeUtil {
   def trivialInterval: Interval = {
     val date = DateTime.now
     date to date
+  }
+  def splitInterval(unit: ReadablePeriod)(
+    interval: Interval, splitNum: Int): List[Seq[DateTime]] = {
+    val dates = interval by unit
+    (dates.view grouped (ceil(dates.size.toDouble / splitNum).toInt)).toList
   }
 }

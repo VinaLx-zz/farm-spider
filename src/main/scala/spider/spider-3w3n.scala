@@ -6,10 +6,13 @@ import spider.util.MD5Hash
 import spider.util.DateTimeUtil.{
   trivialInterval,
   fromFormatString,
-  toFormatString
+  toFormatString,
+  splitInterval
 }
 
 import scala.math.floor
+import scala.concurrent.{ Future, ExecutionContext, Await }
+import scala.concurrent.duration.Duration.Inf
 // http support
 import java.net.HttpCookie
 import scalaj.http.HttpResponse
@@ -52,13 +55,17 @@ case class ProductTableParam(
 
 case class User(username: String, password: String)
 
+case class SpiderContext(
+  user: User,
+  categoryIds: IndexedSeq[Int] = IndexedSeq.empty[Int],
+  typeIds: IndexedSeq[(Int, String)] = IndexedSeq.empty[(Int, String)])
+
 case class State3w3n(
   hash: Option[String] = None,
   cookies: Seq[HttpCookie] = Nil,
   categoryIds: IndexedSeq[Int] = IndexedSeq.empty[Int],
   typeIds: IndexedSeq[(Int, String)] = IndexedSeq.empty[(Int, String)],
-  user: Option[User] = None,
-  period: Interval = trivialInterval)
+  user: Option[User] = None)
 
 case class ProductTableRecord(
   name: String,
@@ -72,18 +79,18 @@ case class ProductTableRecord(
 }
 
 object Combinators {
+  type Context[+A] = Spider[SpiderContext, A]
   type Spider3w3n[+A] = Spider[State3w3n, A]
 
   import Setters._
 
   def startOne(
     user: User,
-    period: Interval = trivialInterval): Spider3w3n[Unit] = {
+    days: IndexedSeq[DateTime]): Spider3w3n[Unit] = {
     for {
-      _ ← setPeriod(period)
       _ ← init(user)
       state ← getState[State3w3n]
-      _ ← getProductsAndSink(state.typeIds, period)
+      _ ← getProductsAndSink(state.typeIds, days)
     } yield ()
   }
 
@@ -110,10 +117,6 @@ object Combinators {
   object Setters {
     def setUser(user: User): Spider3w3n[Unit] = {
       changeState(_.copy(user = Some(user)))
-    }
-
-    def setPeriod(period: Interval): Spider3w3n[Unit] = {
-      changeState(_.copy(period = period))
     }
 
     def setHashAndCategoryIds: Spider3w3n[Unit] = {
@@ -172,13 +175,13 @@ object Combinators {
    * @return Spider3w3n[Unit]
    */
   def getProductsAndSink(
-    productIds: Seq[(Int, String)], period: Interval = trivialInterval) = {
-    val spiderStream = for {
+    productIds: Seq[(Int, String)], dates: IndexedSeq[DateTime]) = {
+    val spiderSeq = for {
       // TODO: compute period lazily without stack overflow
-      date <- (period by[IndexedSeq] 1.day)
-      (id, t) <- productIds 
-    } yield (getProductOfType(id, date) flatMap( records => sink(t, records)))
-    sequence(spiderStream).map(_ ⇒ ())
+      date ← dates
+      (id, t) ← productIds
+    } yield (getProductOfType(id, date) flatMap (records ⇒ sink(t, records)))
+    sequence(spiderSeq).map(_ ⇒ ())
   }
 
   def sink(record: (String, IndexedSeq[ProductTableRecord])): Spider3w3n[Unit] = {
@@ -200,7 +203,7 @@ object Combinators {
       val params = ProductTableParam(
         pageNo = pageNo, typeId = typeId, date = date)
       val thisPage = getProductRecords(params)
-      acc flatMap { before ⇒ 
+      acc flatMap { before ⇒
         thisPage flatMap { current ⇒
           if (current.isEmpty) unit(before)
           else go(unit(before ++ current), pageNo + 1, date)
@@ -275,6 +278,30 @@ object TextProcessing {
       }
     recordList.toIndexedSeq
   }
+}
+
+object Runner {
+  def initSpiders(
+    user: User,
+    period: Interval = trivialInterval,
+    workerNum: Int = 1): List[Spider3w3n[Unit]] = {
+    val datesList = splitInterval(1.day)(period, workerNum)
+    datesList map (dates ⇒ startOne(user, dates.toIndexedSeq))
+  }
+
+  def runSpiderAsync(s: Spider3w3n[Unit])(
+    implicit ec: ExecutionContext): Future[Unit] = Future {
+    s run State3w3n()
+  }
+
+  def go(
+    user: User,
+    period: Interval = trivialInterval,
+    workerNum: Int = 4)(implicit ec: ExecutionContext): List[Future[Unit]] = {
+    initSpiders(user, period, workerNum) map { spider ⇒
+      runSpiderAsync(spider)
+    }
+  }
 
   def main(args: Array[String]): Unit = {
     if (args.size < 2) {
@@ -288,11 +315,12 @@ object TextProcessing {
     val interval = (currentTime - d.day) to currentTime
 
     val start = System.currentTimeMillis
-    val s = startOne(user, interval)
-    s run State3w3n()
+    import scala.concurrent.ExecutionContext.Implicits._
+    for {
+      f ← go(user, interval)
+    } Await.result(f, Inf)
     val end = System.currentTimeMillis
-    println(s"spend ${(end - start).toDouble / 1000} seconds for  days records")
+    println(s"spend ${(end - start).toDouble / 1000} seconds for $d days records")
 
   }
 }
-
