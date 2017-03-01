@@ -8,10 +8,14 @@ import spider.util.DateTimeUtil.{
   trivialInterval,
   toFormatString
 }
+import spider.database._
+import slick.jdbc.JdbcBackend._
+import slick.dbio.DBIO
 
 import scala.concurrent.{ Future, ExecutionContext, Await }
 import scala.concurrent.duration.Duration.Inf
 import scala.util.{ Try, Success, Failure }
+import java.util.concurrent.ForkJoinPool
 
 import com.github.nscala_time.time.Imports._
 
@@ -46,6 +50,16 @@ object Sinker {
     val s = s"$name: $content\n"
     stream.write(s.getBytes)
   }
+
+  def writeToDB(db: Database): Sinker = { (name, t) ⇒
+    t match {
+      case Success(records) ⇒
+        val f = db.run(DBIO.sequence(
+          records map { record ⇒ FarmTable.insert(name, record) }))
+        Await.result(f, Inf)
+      case Failure(e) ⇒ ()
+    }
+  }
 }
 
 object Runner {
@@ -53,16 +67,16 @@ object Runner {
     user: User,
     period: Interval = trivialInterval,
     sink: Sinker = simpleSink,
-    slices: Int = 4): List[Spider3w3n[Unit]] = {
-    val datesList = splitInterval(1.day)(period, slices)
-    val streams = for {
-      i ← 0 until datesList.size
-    } yield new FileOutputStream(s"$i.txt")
-    datesList zip streams map {
-      case (dates, s) ⇒
-        getSpider(user, dates.toIndexedSeq, toOutputStream(s) _)
-    }
-    // datesList map (dates ⇒ getSpider(user, dates.toIndexedSeq, sink))
+    parallelism: Int = 10): List[Spider3w3n[Unit]] = {
+    val datesList = splitInterval(1.day)(period, parallelism)
+    // val streams = for {
+    //   i ← 0 until datesList.size
+    // } yield new FileOutputStream(s"$i.txt")
+    // datesList zip streams map {
+    //   case (dates, s) ⇒
+    //     getSpider(user, dates.toIndexedSeq, toOutputStream(s) _)
+    // }
+    datesList map (dates ⇒ getSpider(user, dates.toIndexedSeq, sink))
   }
 
   def runSpiderAsync(s: Spider3w3n[Unit])(
@@ -70,7 +84,9 @@ object Runner {
     s run State3w3n()
   }
 
-  def runAll(l: List[Spider3w3n[Unit]])(implicit ec: ExecutionContext): Unit = {
+  def runConcurrently(l: List[Spider3w3n[Unit]]): Unit = {
+    implicit val ec = ExecutionContext.fromExecutorService(
+      new ForkJoinPool(l.size))
     val fs = l map (s ⇒ runSpiderAsync(s))
     val streams = for {
       i ← 0 until l.size
@@ -104,8 +120,11 @@ object Runner {
   def go(args: Array[String]): Unit = {
     import scala.concurrent.ExecutionContext.Implicits._
     val (user, interval, worker) = parseArgs(args)
-    val spiders = initSpiders(user, interval, toOutputStream(System.out))
-    runAll(spiders)
+    val db = FarmDB.connect("root")
+    Await.result(
+      db.run(FarmDB.createProductTable) recover { case e ⇒ () }, Inf)
+    val spiders = initSpiders(user, interval, writeToDB(db))
+    runConcurrently(spiders)
   }
 
   def main(args: Array[String]): Unit = {
