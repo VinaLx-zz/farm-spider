@@ -8,6 +8,8 @@ import spider.util.DateTimeUtil.{
   toFormatString
 }
 
+import scala.util.{ Try, Success, Failure }
+
 // http support
 import java.net.HttpCookie
 import scalaj.http.HttpResponse
@@ -132,7 +134,7 @@ object Combinators {
       state ← getState[State3w3n]
       resp ← get[State3w3n](
         URLs.BASE + URLs.PRICE_INDEX)(cookies = state.cookies)
-    } yield resp.body
+    } yield resp.get.body
   }
 
   def getProductIdsFromCategoryId(
@@ -140,7 +142,7 @@ object Combinators {
     Spider.get[State3w3n](
       URLs.BASE + URLs.SHOW_TYPE_LIST)(
         params = List("pId" -> categoryId.toString))
-      .map(resp ⇒ parseTypeListJson(resp.body))
+      .map { resp ⇒ parseTypeListJson(resp.get.body) }
   }
 
   /**
@@ -149,7 +151,7 @@ object Combinators {
   def getProductsAndSink(
     productIds: Seq[(Int, String)],
     dates: IndexedSeq[DateTime],
-    sink: (String, IndexedSeq[Record3w3n]) ⇒ Unit) = {
+    sink: Sinker) = {
     val spiderSeq = for {
       date ← dates
       (id, t) ← productIds
@@ -157,40 +159,43 @@ object Combinators {
     sequence(spiderSeq).map(_ ⇒ ())
   }
 
-  /**
-   * @return Spider3w3n[IndexedSeq[FarmRecord]]
-   */
   def getProductOfType(typeId: Int, date: DateTime = DateTime.now) = {
     def go(
-      acc: Spider3w3n[IndexedSeq[Record3w3n]],
+      acc: Spider3w3n[Try[IndexedSeq[Record3w3n]]],
       pageNo: Int,
-      date: DateTime): Spider3w3n[IndexedSeq[Record3w3n]] = {
+      date: DateTime): Spider3w3n[Try[IndexedSeq[Record3w3n]]] = {
       val params = ProductTableParam(
         pageNo = pageNo, typeId = typeId, date = date)
       val thisPage = getProductRecords(params)
       acc flatMap { before ⇒
-        thisPage flatMap { current ⇒
-          if (current.isEmpty) unit(before)
-          else go(unit(before ++ current), pageNo + 1, date)
+        thisPage flatMap {
+          case Success(current) ⇒
+            if (current.isEmpty) unit(before)
+            else go(unit(before map (_ ++ current)), pageNo + 1, date)
+          case fail ⇒ unit(fail)
         }
       }
     }
-    go(unit(IndexedSeq.empty), 1, date)
+    go(unit(Success(IndexedSeq.empty)), 1, date)
   }
 
   def getProductRecords(
-    params: ProductTableParam): Spider3w3n[IndexedSeq[Record3w3n]] = {
+    params: ProductTableParam): Spider3w3n[Try[IndexedSeq[Record3w3n]]] = {
     def handleResponse(
-      resp: HttpResponse[String]): Spider3w3n[IndexedSeq[Record3w3n]] = {
-      if (resp.isSuccess) unit(parseProductTable(resp.body))
-      // if login status expired, relogin and retry
-      else if (resp.isRedirect) relogin flatMap (_ ⇒ getProductRecords(params))
-      else {
-        // shouldn't go here in normal case
-        assert(false)
-        (sys.exit(1): Spider3w3n[IndexedSeq[Record3w3n]])
+      r: Try[HttpResponse[String]]): Spider3w3n[Try[IndexedSeq[Record3w3n]]] =
+      r match {
+        case Success(resp) ⇒
+          if (resp.isSuccess) unit(Try(parseProductTable(resp.body)))
+          // if login status expired, relogin and retry
+          else if (resp.isRedirect)
+            relogin flatMap { _ ⇒ getProductRecords(params) }
+          else
+            // shouldn't go here in normal case
+            unit(Try { assert(false, resp); sys.exit(1) })
+        case Failure(e) ⇒
+          unit(Failure[IndexedSeq[Record3w3n]](
+            new Throwable("http error when getting table", e)))
       }
-    }
     for {
       state ← getState[State3w3n]
       resp ← get(URLs.BASE + URLs.PRODUCT_TABLE)(

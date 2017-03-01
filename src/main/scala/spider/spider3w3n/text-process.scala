@@ -48,7 +48,7 @@ object TextProcessing {
         (fields: Iterable[String]) ⇒
           val cols = fields.toIndexedSeq
           val price = cols(1).trim.split("""[^\d\.]""", 2)(0).toDouble
-          val date = fromFormatString(cols(3), "yyyy-MM-dd")
+          val date = fromFormatString(cols(3).trim, "yyyy-MM-dd")
           Record3w3n(
             name = cols(0),
             price = price,

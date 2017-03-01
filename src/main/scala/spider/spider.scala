@@ -3,6 +3,7 @@ package spider
 import java.net.HttpCookie
 import scalaj.http._
 import scala.io.Source
+import scala.util.{ Try, Success, Failure }
 import scala.concurrent._
 
 /**
@@ -73,12 +74,6 @@ object Spider {
     }
   }
 
-  def sequence[S, A](as: Stream[Spider[S, A]]): Spider[S, Stream[A]] = {
-    as.foldRight(unit[S, Stream[A]](Stream.empty[A])) { (sa, acc) ⇒
-      sa.map2(acc)(_ #:: _)
-    }
-  }
-
   def post[S](url: String)(
     form: Seq[(String, String)] = Nil,
     headers: Seq[(String, String)] = Nil) = unit[S, HttpResponse[String]] {
@@ -88,8 +83,15 @@ object Spider {
   def get[S](url: String)(
     params: Seq[(String, String)] = Nil,
     headers: Seq[(String, String)] = Nil,
-    cookies: Seq[HttpCookie] = Nil) = unit[S, HttpResponse[String]] {
-    Http(url).params(params).headers(headers).cookies(cookies).asString
+    cookies: Seq[HttpCookie] = Nil,
+    retry: Int = 3): Spider[S, Try[HttpResponse[String]]] = {
+    unit[S, Try[HttpResponse[String]]] {
+      Try(Http(url).params(params).headers(headers).cookies(cookies).asString)
+    } flatMap {
+      case s @ Success(_) ⇒ unit(s)
+      case fail if retry > 0 ⇒ get(url)(params, headers, cookies, retry - 1)
+      case noretry ⇒ unit(noretry)
+    }
   }
 
 }

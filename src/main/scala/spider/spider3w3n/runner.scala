@@ -11,6 +11,7 @@ import spider.util.DateTimeUtil.{
 
 import scala.concurrent.{ Future, ExecutionContext, Await }
 import scala.concurrent.duration.Duration.Inf
+import scala.util.{ Try, Success, Failure }
 
 import com.github.nscala_time.time.Imports._
 
@@ -19,21 +20,29 @@ import TextProcessing._
 import Sinker._
 
 object Sinker {
-  type Sinker = (String, IndexedSeq[Record3w3n]) ⇒ Unit
+  type Sinker = (String, Try[IndexedSeq[Record3w3n]]) ⇒ Unit
 
-  def simpleSink(name: String, records: IndexedSeq[Record3w3n]): Unit = {
-    def print(record: (String, IndexedSeq[Record3w3n])): Unit = {
+  def simpleSink(name: String, records: Try[IndexedSeq[Record3w3n]]): Unit = {
+    def print(record: (String, Try[IndexedSeq[Record3w3n]])): Unit = {
       println(record._1)
-      record._2 foreach println
+      record._2 match {
+        case Success(s) ⇒ s foreach println
+        case Failure(e) ⇒ e.printStackTrace()
+
+      }
     }
     print((name, records))
   }
 
   def toOutputStream(stream: OutputStream)(
-    name: String, records: IndexedSeq[Record3w3n]): Unit = {
-    val content = if (records.nonEmpty)
-      s"${toFormatString(records.head.date)} Get"
-    else "None"
+    name: String, t: Try[IndexedSeq[Record3w3n]]): Unit = {
+    val content: String = t match {
+      case Success(records) ⇒
+        if (records.nonEmpty)
+          s"${toFormatString(records.head.date)} Get"
+        else "None"
+      case Failure(e) ⇒ throw e
+    }
     val s = s"$name: $content\n"
     stream.write(s.getBytes)
   }
@@ -46,7 +55,14 @@ object Runner {
     sink: Sinker = simpleSink,
     slices: Int = 4): List[Spider3w3n[Unit]] = {
     val datesList = splitInterval(1.day)(period, slices)
-    datesList map (dates ⇒ getSpider(user, dates.toIndexedSeq, sink))
+    val streams = for {
+      i ← 0 until datesList.size
+    } yield new FileOutputStream(s"$i.txt")
+    datesList zip streams map {
+      case (dates, s) ⇒
+        getSpider(user, dates.toIndexedSeq, toOutputStream(s) _)
+    }
+    // datesList map (dates ⇒ getSpider(user, dates.toIndexedSeq, sink))
   }
 
   def runSpiderAsync(s: Spider3w3n[Unit])(
@@ -55,8 +71,21 @@ object Runner {
   }
 
   def runAll(l: List[Spider3w3n[Unit]])(implicit ec: ExecutionContext): Unit = {
+    val fs = l map (s ⇒ runSpiderAsync(s))
+    val streams = for {
+      i ← 0 until l.size
+    } yield new FileOutputStream(s"res$i.txt")
     for {
-      f ← l map (s ⇒ runSpiderAsync(s))
+      (f, stream) ← fs zip streams
+    } {
+      f onComplete {
+        case Success(u) ⇒ stream.write("success\n".getBytes)
+        case Failure(e) ⇒
+          e.printStackTrace(new PrintStream(stream))
+      }
+    }
+    for {
+      f ← fs
     } Await.result(f, Inf)
   }
 
@@ -85,6 +114,5 @@ object Runner {
     val end = System.currentTimeMillis
     println(
       s"spend ${(end - start).toDouble / 1000} seconds")
-
   }
 }
