@@ -8,4 +8,5 @@ lazy val root = (project in file("."))
       "net.ruippeixotog" %% "scala-scraper" % "1.2.0",
       "com.github.nscala-time" %% "nscala-time" % "2.16.0",
       "com.typesafe.slick" %% "slick" % "3.2.0",
-      "mysql" % "mysql-connector-java" % "5.1.41"))
+      "mysql" % "mysql-connector-java" % "5.1.41",
+      "org.slf4j" % "slf4j-nop" % "1.6.4"))
