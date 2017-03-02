@@ -7,16 +7,9 @@ import slick.dbio.DBIO
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration.Inf
 
-case class DBConfig(
-  username: String = "root",
-  password: Option[String] = None,
-  host: String = "localhost",
-  port: Int = 3306,
-  db: Option[String] = None,
-  properties: Seq[(String, String)] = Seq.empty)
-
 object FarmDB {
   def prepareDbAndTable(config: DBConfig): Unit = {
+    import scala.concurrent.ExecutionContext.Implicits.global
     if (config.db.isEmpty) return
     val db = getConnection(config.copy(db = None))
     val actions = DBIO.seq(
@@ -34,7 +27,7 @@ object FarmDB {
   }
 
   private def mysqlURL(config: DBConfig): String = {
-    val builder = new StringBuilder(s"jdbc:mysql://$host:$port")
+    val builder = new StringBuilder(s"jdbc:mysql://${config.host}:${config.port}")
     for (db ← config.db) builder ++= s"/$db"
     builder ++= s"?user=${config.username}"
     for (pass ← config.password) builder ++= s"&password=$pass"

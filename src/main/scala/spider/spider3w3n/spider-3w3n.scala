@@ -3,7 +3,7 @@ package spider3w3n
 
 import Spider._
 
-import spider.util.DateTimeUtil.{
+import spider.Util.DateTimeUtil.{
   trivialInterval,
   toFormatString
 }

@@ -1,8 +1,8 @@
 package spider
 package spider3w3n
 
-import spider.util.MD5Hash
-import spider.util.DateTimeUtil.fromFormatString
+import spider.Util.md5Hash
+import spider.Util.DateTimeUtil.fromFormatString
 
 // json parsing
 import org.json4s._
@@ -20,7 +20,7 @@ import Sinker._
 object TextProcessing {
   private[spider3w3n] def extractHash(page: String): Option[String] = {
     val extractorRegex = """enc\('(\w+?)'\)""".r
-    extractorRegex findFirstMatchIn page map (_.group(1)) map (MD5Hash(_))
+    extractorRegex findFirstMatchIn page map (_.group(1)) map (md5Hash(_))
   }
 
   private[spider3w3n] def extractCategoryIds(page: String): IndexedSeq[Int] = {

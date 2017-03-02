@@ -3,8 +3,8 @@ package spider3w3n
 
 import java.io._
 
-import spider.util.DateTimeUtil.{
-  splitInterval,
+import spider.Util.splitSeq
+import spider.Util.DateTimeUtil.{
   trivialInterval,
   toFormatString
 }
@@ -65,10 +65,10 @@ object Sinker {
 object Runner {
   def initSpiders(
     user: User,
-    period: Interval = trivialInterval,
+    period: IndexedSeq[DateTime] = IndexedSeq(DateTime.now),
     sink: Sinker = simpleSink,
-    parallelism: Int = 10): List[Spider3w3n[Unit]] = {
-    val datesList = splitInterval(1.day)(period, parallelism)
+    slices: Int = 10): List[Spider3w3n[Unit]] = {
+    val datesList = splitSeq(period, slices)
     // val streams = for {
     //   i ← 0 until datesList.size
     // } yield new FileOutputStream(s"$i.txt")
@@ -84,7 +84,7 @@ object Runner {
     s run State3w3n()
   }
 
-  def runConcurrently(l: List[Spider3w3n[Unit]]): Unit = {
+  def runSpiders(l: List[Spider3w3n[Unit]]): Unit = {
     implicit val ec = ExecutionContext.fromExecutorService(
       new ForkJoinPool(l.size))
     val fs = l map (s ⇒ runSpiderAsync(s))
@@ -105,33 +105,33 @@ object Runner {
     } Await.result(f, Inf)
   }
 
-  def parseArgs(args: Array[String]): (User, Interval, Int) = {
-    if (args.size < 2) {
-      println("usage: run <username> <password> [period]")
-      sys.exit(1)
-    }
-    val user = User(args(0), args(1))
-    val currentTime = DateTime.now
-    val day = if (args.size == 3) args(2).toInt - 1 else 0
-    val interval = (currentTime - day.day) to currentTime
-    (user, interval, 4)
-  }
+  // def parseArgs(args: Array[String]): (User, Interval, Int) = {
+  //   if (args.size < 2) {
+  //     println("usage: run <username> <password> [period]")
+  //     sys.exit(1)
+  //   }
+  //   val user = User(args(0), args(1))
+  //   val currentTime = DateTime.now
+  //   val day = if (args.size == 3) args(2).toInt - 1 else 0
+  //   val interval = (currentTime - day.day) to currentTime
+  //   (user, interval, 4)
+  // }
 
-  def go(args: Array[String]): Unit = {
-    import scala.concurrent.ExecutionContext.Implicits._
-    val (user, interval, worker) = parseArgs(args)
-    val db = FarmDB.connect("root")
-    Await.result(
-      db.run(FarmDB.createProductTable) recover { case e ⇒ () }, Inf)
-    val spiders = initSpiders(user, interval, writeToDB(db))
-    runConcurrently(spiders)
-  }
+  // def go(args: Array[String]): Unit = {
+  //   import scala.concurrent.ExecutionContext.Implicits._
+  //   val (user, interval, worker) = parseArgs(args)
+  //   val db = FarmDB.connect("root")
+  //   Await.result(
+  //     db.run(FarmDB.createProductTable) recover { case e ⇒ () }, Inf)
+  //   val spiders = initSpiders(user, interval, writeToDB(db))
+  //   runConcurrently(spiders)
+  // }
 
-  def main(args: Array[String]): Unit = {
-    val start = System.currentTimeMillis
-    go(args)
-    val end = System.currentTimeMillis
-    println(
-      s"spend ${(end - start).toDouble / 1000} seconds")
-  }
+  // def main(args: Array[String]): Unit = {
+  //   val start = System.currentTimeMillis
+  //   go(args)
+  //   val end = System.currentTimeMillis
+  //   println(
+  //     s"spend ${(end - start).toDouble / 1000} seconds")
+  // }
 }
