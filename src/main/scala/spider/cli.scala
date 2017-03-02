@@ -2,7 +2,8 @@ package spider
 
 import spider.Util.DateTimeUtil.fromFormatString
 import spider.Util.{ tryOption, cwd }
-import spider.database.DBConfig
+import spider.database.{ DBConfig, FarmDB }
+import spider.spider3w3n._
 
 import com.github.nscala_time.time.Imports._
 import java.nio.file.Path
@@ -10,12 +11,17 @@ import scala.util.{ Try, Success, Failure }
 import scala.io.Source
 
 object CLI {
+  case class UniversalArgs(
+    val username: Option[String] = None,
+    val password: Option[String] = None,
+    val confPath: String = cwd + "/db.json")
+
   object Scrape {
     case class ScrapeArgs(
       from: Option[DateTime] = None,
       to: Option[DateTime] = None,
       dates: IndexedSeq[DateTime] = IndexedSeq.empty,
-      configPath: String = cwd + "db.json",
+      u: UniversalArgs = UniversalArgs(),
       parallelism: Int = 1)
 
     implicit class StringConvertOption(s: String) {
@@ -50,7 +56,11 @@ object CLI {
           case None ⇒ errorExit(s"parallelism must be an integer")
         }
         case "--config" +: p +: tail ⇒
-          parseArgsImpl(acc.copy(configPath = p), tail)
+          parseArgsImpl(acc.copy(u = acc.u.copy(confPath = p)), tail)
+        case "--user" +: user +: tail ⇒
+          parseArgsImpl(acc.copy(u = acc.u.copy(username = Some(user))), tail)
+        case "--pass" +: pass +: tail ⇒
+          parseArgsImpl(acc.copy(u = acc.u.copy(password = Some(pass))), tail)
         case date +: tail ⇒ date.toDateOption match {
           case Some(d) ⇒ parseArgsImpl(acc.copy(dates = acc.dates :+ d), tail)
           case None ⇒ errorExit(s"invalid date format: $date")
@@ -59,13 +69,20 @@ object CLI {
       parseArgsImpl(ScrapeArgs(), args)
     }
 
-    def apply(args: Seq[String]): Unit = {
-      val ScrapeArgs(from, to, dates, confPath, parallelism) = parseArgs(args)
-      val finalDates = (from, to) match {
-        case (Some(from), Some(to)) ⇒ dates ++ from.to(to).by[IndexedSeq](1.day)
-        case _ ⇒ dates
+    def extractDates(args: ScrapeArgs): IndexedSeq[DateTime] = {
+      (args.from, args.to) match {
+        case (Some(from), Some(to)) ⇒
+          args.dates ++ from.to(to).by[IndexedSeq](1.day)
+        case _ ⇒ args.dates
       }
-      val dbconfig = getConfig(confPath)
+    }
+
+    def apply(args: Seq[String]): Unit = {
+      val a = parseArgs(args)
+      val dates = extractDates(a)
+      val db = FarmDB.getConnection(getConfig(a.u.confPath))
+      val user = extractUser(a.u)
+      Runner.go(user, dates, Sinker.writeToDB(db), a.parallelism)
     }
   }
   object Help {
@@ -92,6 +109,11 @@ object CLI {
       }
       case Failure(e) ⇒ errorExit(e.getMessage)
     }
+  }
+
+  def extractUser(u: UniversalArgs): User = (u.username, u.password) match {
+    case (Some(user), Some(pass)) ⇒ User(user, pass)
+    case _ ⇒ errorExit("require username and password for 3w3n.com")
   }
 
   def main(args: Array[String]): Unit = args.toSeq match {

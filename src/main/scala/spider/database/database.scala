@@ -18,6 +18,7 @@ object FarmDB {
   }
 
   def getConnection(config: DBConfig): Database = {
+    prepareDbAndTable(config)
     Database.forURL(mysqlURL(config), driver = "com.mysql.jdbc.Driver")
   }
 
