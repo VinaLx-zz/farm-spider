@@ -4,5 +4,7 @@
     "host": "localhost",
     "port": 3306,
     "db": "farm",
-    "properties": {}
+    "properties": {
+        "useSSL": "false"
+    }
 }

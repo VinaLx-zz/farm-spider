@@ -26,6 +26,7 @@ object DBConfig {
   }
 
   private def fromJsonValue(json: JValue): Option[DBConfig] = {
+    // a better way ? :(
     var config = default
     config = json \ "username" match {
       case JString(s) ⇒ config.copy(username = s)

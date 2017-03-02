@@ -92,6 +92,12 @@ object Runner {
     val fs = l map (s ⇒ runSpiderAsync(s))
     for {
       f ← fs
+    } f onComplete {
+      case Success(_) ⇒ ()
+      case Failure(e) ⇒ e.printStackTrace
+    }
+    for {
+      f ← fs
     } Await.result(f, Inf)
   }
 }
