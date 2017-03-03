@@ -1,6 +1,6 @@
 package spider
 
-import spider.Util.DateTimeUtil.fromFormatString
+import spider.Util.DateTimeUtil.{ fromFormatString, toFormatString }
 import spider.Util.{ tryOption, cwd }
 import spider.database.{ DBConfig, FarmDB }
 import spider.spider3w3n._
@@ -38,7 +38,7 @@ object CLI {
       }
     }
 
-    def parseArgs(args: Seq[String]): ScrapeArgs = {
+    private def parseArgs(args: Seq[String]): ScrapeArgs = {
       @annotation.tailrec
       def parseArgsImpl(
         acc: ScrapeArgs, cur: Seq[String]): ScrapeArgs = cur match {
@@ -90,9 +90,60 @@ object CLI {
       println("this is a help message")
     }
   }
-  object Serve {
+  object Wait {
+    import slick.jdbc.JdbcBackend.Database
+
+    case class ServeArgs(u: UniversalArgs = UniversalArgs())
+
+    case class TimeOfDay(hour: Int, minute: Int, second: Int)
+
+    val wakeUp = TimeOfDay(14, 45, 0)
+
+    private def parseArgs(args: Seq[String]): ServeArgs = {
+      @annotation.tailrec
+      def parseArgsImpl(
+        acc: ServeArgs, cur: Seq[String]): ServeArgs = cur match {
+        case e if cur.isEmpty ⇒ acc
+        case "--config" +: p +: tail ⇒
+          parseArgsImpl(acc.copy(u = acc.u.copy(confPath = p)), tail)
+        case "--user" +: user +: tail ⇒
+          parseArgsImpl(acc.copy(u = acc.u.copy(username = Some(user))), tail)
+        case "--pass" +: pass +: tail ⇒
+          parseArgsImpl(acc.copy(u = acc.u.copy(password = Some(pass))), tail)
+      }
+      parseArgsImpl(ServeArgs(), args)
+    }
+
+    def nextWakeUp(from: DateTime): DateTime = {
+      val todayWakeUp =
+        from.hour(wakeUp.hour).minute(wakeUp.minute).second(wakeUp.second)
+      if (from > todayWakeUp) todayWakeUp + 1.day
+      else todayWakeUp
+    }
+
+    def sleepUntil(to: DateTime): Unit = {
+      Thread.sleep(to.getMillis - DateTime.now.getMillis)
+    }
+
+    private def wait(db: Database, user: User): Unit = {
+      while (true) {
+        // there is a veeeerrrryyyy short time elapse between the two function
+        // call, but it should be ok in 99.999% of cases
+        val wakeUpTime = nextWakeUp(DateTime.now)
+        println(
+          s"sleep until ${toFormatString(wakeUpTime, "yyyy-MM-dd HH:mm:ss")}")
+        sleepUntil(wakeUpTime)
+        println(s"start scraping records of ${toFormatString(wakeUpTime)}")
+        Runner.go(user = user, sink = Sinker.writeToDB(db))
+        println("put to sleep")
+      }
+    }
+
     def apply(args: Seq[String]): Unit = {
-      println("serving...")
+      val a = parseArgs(args)
+      val db = FarmDB.getConnection(getConfig(a.u.confPath))
+      val user = extractUser(a.u)
+      wait(db, user)
     }
   }
 
@@ -119,7 +170,7 @@ object CLI {
   def main(args: Array[String]): Unit = args.toSeq match {
     case e if args.isEmpty ⇒ Help(args)
     case "scrape" +: tail ⇒ Scrape(tail)
-    case "serve" +: tail ⇒ Serve(tail)
+    case "wait" +: tail ⇒ Wait(tail)
     case "help" +: tail ⇒ Help(tail)
     case other +: tail ⇒ errorExit(s"unknown command $other")
   }
