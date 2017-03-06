@@ -1,12 +1,13 @@
 package spider
 
-import java.security.MessageDigest
-import java.text.SimpleDateFormat
-import com.github.nscala_time.time.Imports._
 import scala.math.ceil
 import scala.util.{ Try, Success, Failure }
-import org.joda.time.ReadablePeriod
+
 import java.nio.file.Paths
+import java.security.MessageDigest
+import java.sql.Date
+
+import com.github.nscala_time.time.Imports._
 
 object Util {
   def md5Hash(s: String): String = {
@@ -15,13 +16,11 @@ object Util {
   }
 
   def splitSeq[A](as: Seq[A], n: Int): List[Seq[A]] = {
-    (as grouped ceil(as.size.toDouble / n).toInt).toList
+    if (as.isEmpty) Nil
+    else (as grouped ceil(as.size.toDouble / n).toInt).toList
   }
 
-  def tryOption[A](a: ⇒ A): Option[A] = Try(a) match {
-    case Success(s) ⇒ Some(a)
-    case Failure(_) ⇒ None
-  }
+  def tryOption[A](a: ⇒ A): Option[A] = Try(a).toOption
 
   def cwd: String = Paths.get(".").toAbsolutePath.toString
 
@@ -36,6 +35,12 @@ object Util {
     def trivialInterval: Interval = {
       val date = DateTime.now
       date to date
+    }
+    def toSQLDate(date: DateTime): Date = {
+      new Date(date.getMillis)
+    }
+    def stripHourMinSec(date: DateTime): DateTime = {
+      date.hour(0).minute(0).second(0)
     }
   }
 }

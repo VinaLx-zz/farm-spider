@@ -18,14 +18,14 @@ case class DBConfig(
 object DBConfig {
   def default: DBConfig = DBConfig()
 
-  def loadJson(s: String): Option[DBConfig] = {
+  def loadJson(s: String): Try[DBConfig] = {
     Try(JsonMethods.parse(s)) match {
-      case Success(json) ⇒ fromJsonValue(json)
-      case Failure(e) ⇒ None
+      case Success(json) ⇒ Success(fromJsonValue(json))
+      case Failure(e) ⇒ Failure(e)
     }
   }
 
-  private def fromJsonValue(json: JValue): Option[DBConfig] = {
+  private def fromJsonValue(json: JValue): DBConfig = {
     // a better way ? :(
     var config = default
     config = json \ "username" match {
@@ -56,6 +56,6 @@ object DBConfig {
         config.copy(properties = config.properties ++ kvPairs.toIndexedSeq)
       case _ ⇒ config
     }
-    Some(config)
+    config
   }
 }

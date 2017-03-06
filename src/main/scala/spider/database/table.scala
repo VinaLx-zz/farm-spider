@@ -2,9 +2,14 @@ package spider.database
 
 import slick.jdbc.MySQLProfile.api._
 import slick.lifted.Tag
+import slick.dbio.DBIO
+
+import com.github.nscala_time.time.Imports._
+
 import java.sql.Date
 
 import spider.spider3w3n.Record3w3n
+import spider.Util.DateTimeUtil.{ toSQLDate, stripHourMinSec }
 
 class FarmTable(tag: Tag)
   extends Table[(String, Option[String], Double, String, Date)](
@@ -24,6 +29,13 @@ object FarmTable extends TableQuery(new FarmTable(_)) {
       Some(record.name),
       record.price,
       record.market,
-      new Date(record.date.getMillis)))
+      toSQLDate(record.date)))
+  }
+
+  def clearRecordsOn(dates: Seq[DateTime]) = {
+    DBIO.sequence(
+      dates map { date ⇒
+        (this filter (_.date === toSQLDate(stripHourMinSec(date)))).delete
+      })
   }
 }
