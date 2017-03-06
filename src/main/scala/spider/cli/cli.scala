@@ -3,7 +3,8 @@ package cli
 
 import spider.Util.DateTimeUtil.{ fromFormatString, toFormatString }
 import spider.Util.{ tryOption, cwd }
-import spider.database.{ DBConfig, FarmDB }
+import spider.database._
+import spider.database.FarmDB._
 import spider.spider3w3n._
 import spider.cli.Args._
 
@@ -122,6 +123,33 @@ object CLI {
     }
   }
 
+  object Remove {
+    case class RemoveArgs(
+      dates: Args[IndexedSeq[DateTime]] = DatesArg(),
+      config: Args[DBConfig] = ConfigArg())
+
+    def parseArgs(args: Seq[String]): RemoveArgs = {
+      @annotation.tailrec
+      def parseArgsImpl(
+        acc: RemoveArgs, rest: Seq[String]): RemoveArgs = rest match {
+        case e if rest.isEmpty ⇒ acc
+        case acc.dates.update(dates, next) ⇒
+          parseArgsImpl(acc.copy(dates = dates), next)
+        case acc.config.update(config, next) ⇒
+          parseArgsImpl(acc.copy(config = config), next)
+        case other +: tail ⇒ errorExit(s"unknown option $other")
+      }
+      parseArgsImpl(RemoveArgs(), args)
+    }
+    def apply(args: Seq[String]): Unit = {
+      import scala.concurrent.ExecutionContext.Implicits._
+      val a = parseArgs(args)
+      val dates = getArgOrExit(a.dates)
+      val db = FarmDB.getConnection(getArgOrExit(a.config))
+      db.runSync(FarmTable.clearRecordsAction(dates))
+    }
+  }
+
   def errorExit(msg: String, code: Int = 1): Nothing = {
     System.err.println("Error: " + msg)
     sys.exit(1)
@@ -137,6 +165,7 @@ object CLI {
     case "scrape" +: tail ⇒ Scrape(tail)
     case "wait" +: tail ⇒ Wait(tail)
     case "help" +: tail ⇒ Help(tail)
+    case "remove" +: tail ⇒ Remove(tail)
     case other +: tail ⇒ errorExit(s"unknown command $other")
   }
 }

@@ -2,9 +2,11 @@ package spider
 package database
 
 import slick.jdbc.JdbcBackend._
-import slick.jdbc.MySQLProfile.api.{ Database ⇒ _, _ }
+import slick.jdbc.MySQLProfile.api.{ Database ⇒ _, DBIOAction ⇒ _, _ }
 import slick.dbio.DBIO
-import scala.concurrent.Await
+import slick.dbio._
+
+import scala.concurrent.{ Await, ExecutionContext }
 import scala.concurrent.duration.Duration.Inf
 
 object FarmDB {
@@ -37,4 +39,11 @@ object FarmDB {
   }
 
   def createProductTable = FarmTable.schema.create
+
+  implicit class SyncDB(db: Database) {
+    def runSync[R](a: DBIOAction[R, NoStream, Nothing])(
+      implicit ec: ExecutionContext): R = {
+      Await.result(db.run(a), Inf)
+    }
+  }
 }

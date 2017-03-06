@@ -32,7 +32,7 @@ object FarmTable extends TableQuery(new FarmTable(_)) {
       toSQLDate(record.date)))
   }
 
-  def clearRecordsOn(dates: Seq[DateTime]) = {
+  def clearRecordsAction(dates: Seq[DateTime]) = {
     DBIO.sequence(
       dates map { date ⇒
         (this filter (_.date === toSQLDate(stripHourMinSec(date)))).delete
