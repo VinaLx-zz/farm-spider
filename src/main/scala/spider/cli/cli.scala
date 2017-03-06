@@ -5,6 +5,7 @@ import spider.Util.DateTimeUtil.{ fromFormatString, toFormatString }
 import spider.Util.{ tryOption, cwd }
 import spider.database.{ DBConfig, FarmDB }
 import spider.spider3w3n._
+import spider.cli.Args._
 
 import com.github.nscala_time.time.Imports._
 import java.nio.file.Path
@@ -15,9 +16,9 @@ object CLI {
 
   object Scrape {
     case class ScrapeArgs(
-      dates: DatesArg = DatesArg(),
-      config: ConfigArg = ConfigArg(),
-      user: UserArg = UserArg(),
+      dates: Args[IndexedSeq[DateTime]] = DatesArg(),
+      config: Args[DBConfig] = ConfigArg(),
+      user: Args[User] = UserArg(),
       parallelism: Int = 1)
 
     implicit class StringConvertOption(s: String) {
@@ -42,29 +43,19 @@ object CLI {
           parseArgsImpl(acc.copy(config = config), next)
         case acc.user.update(user, next) ⇒
           parseArgsImpl(acc.copy(user = user), next)
-        case "--parallelism" +: p +: tail ⇒ p.toIntOption match {
-          case None ⇒ errorExit("parallelism must be an integer")
-          case Some(i) ⇒ parseArgsImpl(acc.copy(parallelism = i), tail)
-        }
         case other +: tail ⇒
           errorExit(s"unknown option $other")
       }
       parseArgsImpl(ScrapeArgs(), args)
     }
 
-    def extractDates(args: ScrapeArgs): IndexedSeq[DateTime] =
-      args.dates.get match {
-        case Success(dates) ⇒ dates
-        case Failure(e) ⇒ errorExit(e.getMessage)
-      }
-
     def apply(args: Seq[String]): Unit = {
       val a = parseArgs(args)
-      val dates = extractDates(a)
-      val db = FarmDB.getConnection(getConfig(a.config))
-      val user = extractUser(a.user)
+      val dates = getArgOrExit(a.dates)
+      val db = FarmDB.getConnection(getArgOrExit(a.config))
+      val user = getArgOrExit(a.user)
       println(a)
-      // Runner.go(user, dates, Sinker.writeToDB(db), a.parallelism)
+      Runner.go(user, dates, Sinker.writeToDB(db), a.parallelism)
     }
   }
   object Help {
@@ -76,8 +67,8 @@ object CLI {
     import slick.jdbc.JdbcBackend.Database
 
     case class WaitArgs(
-      user: UserArg = UserArg(),
-      config: ConfigArg = ConfigArg())
+      user: Args[User] = UserArg(),
+      config: Args[DBConfig] = ConfigArg())
 
     case class TimeOfDay(hour: Int, minute: Int, second: Int)
 
@@ -125,25 +116,20 @@ object CLI {
 
     def apply(args: Seq[String]): Unit = {
       val a = parseArgs(args)
-      val db = FarmDB.getConnection(getConfig(a.config))
-      val user = extractUser(a.user)
+      val db = FarmDB.getConnection(getArgOrExit(a.config))
+      val user = getArgOrExit(a.user)
       wait(db, user)
     }
   }
 
   def errorExit(msg: String, code: Int = 1): Nothing = {
-    System.err.println("error: " + msg)
+    System.err.println("Error: " + msg)
     sys.exit(1)
   }
 
-  def getConfig(arg: ConfigArg): DBConfig = arg.get match {
-    case Success(config) ⇒ config
+  def getArgOrExit[A](arg: Args[A]): A = arg.get match {
+    case Success(a) ⇒ a
     case Failure(e) ⇒ errorExit(e.getMessage)
-  }
-
-  def extractUser(u: UserArg): User = (u.user, u.pass) match {
-    case (Some(user), Some(pass)) ⇒ User(user, pass)
-    case _ ⇒ errorExit("require username and password for 3w3n.com")
   }
 
   def main(args: Array[String]): Unit = args.toSeq match {
