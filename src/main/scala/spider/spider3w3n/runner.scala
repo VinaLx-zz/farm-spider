@@ -9,6 +9,7 @@ import spider.Util.DateTimeUtil.{
   toFormatString
 }
 import spider.database._
+import spider.database.FarmDB._
 import slick.jdbc.JdbcBackend._
 import slick.dbio.DBIO
 
@@ -54,9 +55,9 @@ object Sinker {
   def writeToDB(db: Database): Sinker = { (name, t) ⇒
     t match {
       case Success(records) ⇒
-        val f = db.run(DBIO.sequence(
+        import scala.concurrent.ExecutionContext.Implicits.global
+        db.runSync(DBIO.sequence(
           records map { record ⇒ FarmTable.insert(name, record) }))
-        Await.result(f, Inf)
       case Failure(e) ⇒ ()
     }
   }

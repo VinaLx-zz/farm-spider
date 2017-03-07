@@ -160,7 +160,7 @@ object CLI {
     case Failure(e) ⇒ errorExit(e.getMessage)
   }
 
-  def main(args: Array[String]): Unit = args.toSeq match {
+  def go(args: Array[String]): Unit = args.toSeq match {
     case e if args.isEmpty ⇒ Help(args)
     case "scrape" +: tail ⇒ Scrape(tail)
     case "wait" +: tail ⇒ Wait(tail)
