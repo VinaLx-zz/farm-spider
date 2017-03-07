@@ -159,12 +159,12 @@ object CLI {
         // there is a veeeerrrryyyy short time elapse between the two function
         // call, but it should be ok in 99.999% of cases
         val wakeUpTime = nextWakeUp(DateTime.now)
-        println(
+        logger.info(
           s"sleep until ${toFormatString(wakeUpTime, "yyyy-MM-dd HH:mm:ss")}")
         sleepUntil(wakeUpTime)
-        println(s"start scraping records of ${toFormatString(wakeUpTime)}")
+        logger.info(s"start scraping records of ${toFormatString(wakeUpTime)}")
         Runner.go(user = user, sink = Sinker.writeToDB(db))
-        println("put to sleep")
+        logger.info("put to sleep")
       }
     }
 
