@@ -3,13 +3,14 @@ package spider3w3n
 
 import java.io._
 
-import spider.Util.splitSeq
+import spider.Util.{ splitSeq, getStackTraceString }
 import spider.Util.DateTimeUtil.{
   trivialInterval,
   toFormatString
 }
 import spider.database._
 import spider.database.FarmDB._
+
 import slick.jdbc.JdbcBackend._
 import slick.dbio.DBIO
 
@@ -19,6 +20,7 @@ import scala.util.{ Try, Success, Failure }
 import java.util.concurrent.ForkJoinPool
 
 import com.github.nscala_time.time.Imports._
+import com.typesafe.scalalogging.Logger
 
 import Combinators._
 import TextProcessing._
@@ -65,6 +67,8 @@ object Sinker {
 
 object Runner {
 
+  lazy val logger = Logger("spider.runner")
+
   def go(
     user: User,
     dates: IndexedSeq[DateTime] = IndexedSeq(DateTime.now),
@@ -77,28 +81,36 @@ object Runner {
     user: User,
     period: IndexedSeq[DateTime] = IndexedSeq(DateTime.now),
     sink: Sinker = simpleSink,
-    slices: Int = 10): List[Spider3w3n[Unit]] = {
+    slices: Int): List[Spider3w3n[Unit]] = {
     val datesList = splitSeq(period, slices)
+    logger.info(s"split ${period.size} date(s) into ${datesList.size} slice(s)")
     datesList map (dates ⇒ getSpider(user, dates.toIndexedSeq, sink))
   }
 
-  def runSpiderAsync(s: Spider3w3n[Unit])(
+  private def runSpiderAsync(s: Spider3w3n[Unit])(
     implicit ec: ExecutionContext): Future[Unit] = Future {
     s run State3w3n()
   }
 
-  def runSpiders(l: List[Spider3w3n[Unit]]): Unit = {
-    implicit val ec = ExecutionContext.fromExecutorService(
-      new ForkJoinPool(l.size))
-    val fs = l map (s ⇒ runSpiderAsync(s))
-    for {
-      f ← fs
-    } f onComplete {
-      case Success(_) ⇒ ()
-      case Failure(e) ⇒ e.printStackTrace
-    }
+  private def waitAll[U](fs: Seq[Future[U]]): Unit = {
     for {
       f ← fs
     } Await.result(f, Inf)
+  }
+
+  private def runSpiders(l: List[Spider3w3n[Unit]]): Unit = {
+    implicit val ec = ExecutionContext.fromExecutorService(
+      new ForkJoinPool(l.size))
+    logger.info(s"starting ${l.size} worker(s)")
+    val fs = l map (s ⇒ runSpiderAsync(s))
+    for {
+      (f, id) ← fs zip (Stream.from(1))
+    } f onComplete {
+      case Success(_) ⇒
+        logger.info(s"worker $id complete")
+      case Failure(e) ⇒
+        logger.error(getStackTraceString(e))
+    }
+    waitAll(fs)
   }
 }

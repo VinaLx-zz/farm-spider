@@ -13,7 +13,11 @@ import java.nio.file.Path
 import scala.util.{ Try, Success, Failure }
 import scala.io.Source
 
+import com.typesafe.scalalogging.Logger
+
 object CLI {
+
+  lazy val logger = Logger("spider.cli")
 
   object Scrape {
     case class ScrapeArgs(
@@ -60,8 +64,17 @@ object CLI {
     }
   }
   object Help {
-    def apply(args: Seq[String]): Unit = {
-      println("this is a help message")
+    lazy val usage =
+      """usage:
+        |   run wait
+        |   run scrape options...
+        |   run remove options...""".stripMargin
+    lazy val waitUsage =
+      """
+      """.stripMargin
+    def apply(args: Seq[String]): Unit = args match {
+      case e if args.isEmpty ⇒ println(usage)
+      case "wait" +: ignore ⇒ println(waitUsage)
     }
   }
   object Wait {
@@ -151,6 +164,7 @@ object CLI {
   }
 
   def errorExit(msg: String, code: Int = 1): Nothing = {
+    logger.error(msg)
     System.err.println("Error: " + msg)
     sys.exit(1)
   }

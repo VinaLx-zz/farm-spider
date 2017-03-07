@@ -9,4 +9,5 @@ lazy val root = (project in file("."))
       "com.github.nscala-time" %% "nscala-time" % "2.16.0",
       "com.typesafe.slick" %% "slick" % "3.2.0",
       "mysql" % "mysql-connector-java" % "5.1.41",
-      "ch.qos.logback" % "logback-classic" % "1.2.1"))
+      "ch.qos.logback" % "logback-classic" % "1.2.1",
+      "com.typesafe.scala-logging" %% "scala-logging" % "3.5.0"))

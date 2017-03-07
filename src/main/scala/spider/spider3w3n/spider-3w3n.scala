@@ -21,6 +21,8 @@ import Combinators._
 import TextProcessing._
 import Sinker._
 
+import com.typesafe.scalalogging.Logger
+
 case class ProductTableParam(
   pageNo: Int, typeId: Int, date: DateTime = DateTime.now) {
   def toSequence: Seq[(String, String)] = {

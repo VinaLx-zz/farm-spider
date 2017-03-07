@@ -3,6 +3,7 @@ package spider
 import scala.math.ceil
 import scala.util.{ Try, Success, Failure }
 
+import java.io.{ StringWriter, PrintWriter }
 import java.nio.file.Paths
 import java.security.MessageDigest
 import java.sql.Date
@@ -42,5 +43,12 @@ object Util {
     def stripHourMinSec(date: DateTime): DateTime = {
       date.hour(0).minute(0).second(0)
     }
+  }
+
+  def getStackTraceString(e: Throwable): String = {
+    val stringWriter = new StringWriter()
+    val printWriter = new PrintWriter(stringWriter)
+    e.printStackTrace(printWriter)
+    stringWriter.toString
   }
 }
