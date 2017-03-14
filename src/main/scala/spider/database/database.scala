@@ -9,14 +9,21 @@ import slick.dbio._
 import scala.concurrent.{ Await, ExecutionContext }
 import scala.concurrent.duration.Duration.Inf
 
+import com.typesafe.scalalogging.Logger
+
 object FarmDB {
+
+  lazy val logger = Logger("spider.database")
+
   def prepareDbAndTable(config: DBConfig): Unit = {
     import scala.concurrent.ExecutionContext.Implicits.global
     if (config.db.isEmpty) return
     val db = getConnection(config.copy(db = None))
     val actions = DBIO.seq(
       createDatabaseSQL(config.db.get), createProductTable)
-    Await.result(db.run(actions) recover { case e ⇒ () }, Inf)
+    Await.result(db.run(actions) recover {
+      case e ⇒ logger.info(e.getMessage)
+    }, Inf)
   }
 
   def getConnection(config: DBConfig): Database = {
