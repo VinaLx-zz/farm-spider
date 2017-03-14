@@ -13,7 +13,7 @@ import spider.Util.DateTimeUtil.{ toSQLDate, stripHourMinSec }
 
 class FarmTable(tag: Tag)
   extends Table[(String, Option[String], Double, String, Date)](
-    tag, Some("Farm"), "Farm") {
+    tag, Some("farm"), "Farm") {
   def name = column[String]("NAME")
   def subtype = column[Option[String]]("SUBTYPE")
   def price = column[Double]("PRICE")
