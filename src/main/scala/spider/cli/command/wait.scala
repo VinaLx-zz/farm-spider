@@ -19,7 +19,7 @@ object Wait {
 
   case class TimeOfDay(hour: Int, minute: Int, second: Int)
 
-  val wakeUp = TimeOfDay(12, 0, 0)
+  val wakeUpTimes = Seq(TimeOfDay(12, 0, 0), TimeOfDay(21, 0, 0))
 
   private def parseArgs(args: Seq[String]): WaitArgs = {
     @annotation.tailrec
@@ -36,28 +36,39 @@ object Wait {
     parseArgsImpl(WaitArgs(), args)
   }
 
-  def nextWakeUp(from: DateTime): DateTime = {
+  private def nextWakeUp(from: DateTime, target: TimeOfDay): DateTime = {
     val todayWakeUp =
-      from.hour(wakeUp.hour).minute(wakeUp.minute).second(wakeUp.second)
+      from.hour(target.hour).minute(target.minute).second(target.second)
     if (from > todayWakeUp) todayWakeUp + 1.day
     else todayWakeUp
   }
 
-  def sleepUntil(to: DateTime): Unit = {
+  private def sleepUntil(to: DateTime): Unit = {
+    logger.info(
+      s"sleep until ${toFormatString(to, "yyyy-MM-dd HH:mm:ss")}")
     Thread.sleep(to.getMillis - DateTime.now.getMillis)
+  }
+
+  private def wakeUp(db: Database, user: User) = {
+    val time = DateTime.now
+    logger.info(s"start scraping records of ${toFormatString(time)}")
+    Scrape.scrapeOne(db, user, time)
+    logger.info(s"${toFormatString(time)} finish")
+  }
+
+  private def waitOne(db: Database, user: User, wakeUpTime: DateTime) = {
+    sleepUntil(wakeUpTime)
+    wakeUp(db, user)
   }
 
   private def wait(db: Database, user: User): Unit = {
     while (true) {
-      // there is a veeeerrrryyyy short time elapse between the two function
-      // call, but it should be ok in 99.999% of cases
-      val wakeUpTime = nextWakeUp(DateTime.now)
-      logger.info(
-        s"sleep until ${toFormatString(wakeUpTime, "yyyy-MM-dd HH:mm:ss")}")
-      sleepUntil(wakeUpTime)
-      logger.info(s"start scraping records of ${toFormatString(wakeUpTime)}")
-      Runner.go(user = user, sink = Sinker.writeToDB(db))
-      logger.info("put to sleep")
+      for {
+        timeOfDay ← wakeUpTimes
+      } {
+        val nextTime = nextWakeUp(DateTime.now, timeOfDay)
+        waitOne(db, user, nextTime)
+      }
     }
   }
 

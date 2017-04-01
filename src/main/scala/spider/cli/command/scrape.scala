@@ -47,9 +47,14 @@ object Scrape {
     parseArgsImpl(ScrapeArgs(), args)
   }
 
+  def scrapeOne(db: Database, user: User, dates: DateTime) =
+    scrape(db, user, IndexedSeq(dates), 1)
+
   def scrape(
-    db: Database, user: User, dates: IndexedSeq[DateTime], parallel: Int) =
+    db: Database, user: User, dates: IndexedSeq[DateTime], parallel: Int) = {
+    Remove.remove(db, dates)
     Runner.go(user, dates, Sinker.writeToDB(db), parallel)
+  }
 
   def apply(args: Seq[String]): Unit = {
     val a = parseArgs(args)
