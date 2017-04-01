@@ -2,7 +2,7 @@ package spider
 package cli
 
 import spider.spider3w3n._
-import spider.Util.{ cwd, tryOption }
+import spider.Util.{ cwd, tryOption, errorExit }
 import spider.Util.DateTimeUtil.{ fromFormatString }
 import spider.database.DBConfig
 
@@ -35,6 +35,10 @@ trait Args[+A] {
   def matcher: Matcher[A]
   def update: ArgMatcher[A] = ArgMatcher(matcher)
   def get: Try[A]
+  def getOrExit: A = get match {
+    case Success(value) ⇒ value
+    case Failure(err) ⇒ errorExit(err.getMessage)
+  }
 }
 
 object Args {

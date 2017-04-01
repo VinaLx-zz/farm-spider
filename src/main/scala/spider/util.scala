@@ -9,6 +9,7 @@ import java.security.MessageDigest
 import java.sql.Date
 
 import com.github.nscala_time.time.Imports._
+import com.typesafe.scalalogging.Logger
 
 object Util {
   def md5Hash(s: String): String = {
@@ -50,5 +51,10 @@ object Util {
     val printWriter = new PrintWriter(stringWriter)
     e.printStackTrace(printWriter)
     stringWriter.toString
+  }
+
+  def errorExit(msg: String, code: Int = 1): Nothing = {
+    System.err.println(s"Error: $msg")
+    sys.exit(code)
   }
 }
