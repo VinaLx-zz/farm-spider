@@ -8,6 +8,7 @@ import spider.cli.Args._
 import spider.database.{ DBConfig, FarmDB }
 
 import com.github.nscala_time.time.Imports._
+import slick.jdbc.JdbcBackend.Database
 
 import scala.util.{ Try, Success, Failure }
 
@@ -46,12 +47,16 @@ object Scrape {
     parseArgsImpl(ScrapeArgs(), args)
   }
 
+  def scrape(
+    db: Database, user: User, dates: IndexedSeq[DateTime], parallel: Int) =
+    Runner.go(user, dates, Sinker.writeToDB(db), parallel)
+
   def apply(args: Seq[String]): Unit = {
     val a = parseArgs(args)
     val dates = a.dates.getOrExit
     val db = FarmDB.getConnection(a.config.getOrExit)
     val user = a.user.getOrExit
     logger.info(a.toString)
-    Runner.go(user, dates, Sinker.writeToDB(db), a.parallelism)
+    scrape(db, user, dates, a.parallelism)
   }
 }

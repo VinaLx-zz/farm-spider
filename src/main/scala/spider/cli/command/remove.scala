@@ -8,6 +8,7 @@ import spider.database._
 import spider.database.FarmDB.SyncDB
 
 import com.github.nscala_time.time.Imports._
+import slick.jdbc.JdbcBackend.Database
 
 object Remove {
   case class RemoveArgs(
@@ -27,11 +28,15 @@ object Remove {
     }
     parseArgsImpl(RemoveArgs(), args)
   }
-  def apply(args: Seq[String]): Unit = {
+  def remove(db: Database, dates: Seq[DateTime]) = {
     import scala.concurrent.ExecutionContext.Implicits._
+    db.runSync(FarmTable.clearRecordsAction(dates))
+  }
+
+  def apply(args: Seq[String]): Unit = {
     val a = parseArgs(args)
     val dates = a.dates.getOrExit
     val db = FarmDB.getConnection(a.config.getOrExit)
-    db.runSync(FarmTable.clearRecordsAction(dates))
+    remove(db, dates)
   }
 }
