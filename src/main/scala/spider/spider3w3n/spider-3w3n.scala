@@ -40,7 +40,7 @@ case class User(username: String, password: String)
 case class State3w3n(
   hash: Option[String] = None,
   cookies: Seq[HttpCookie] = Nil,
-  categoryIds: IndexedSeq[Int] = IndexedSeq.empty[Int],
+  categoryIds: IndexedSeq[(Int, String)] = IndexedSeq.empty[(Int, String)],
   typeIds: IndexedSeq[(Int, String)] = IndexedSeq.empty[(Int, String)],
   user: Option[User] = None)
 
@@ -57,6 +57,8 @@ case class Record3w3n(
 
 object Combinators {
   type Spider3w3n[+A] = Spider[State3w3n, A]
+  type CategoryId = (Int, String)
+  type ProductId = (Int, String)
 
   import Setters._
 
@@ -91,6 +93,24 @@ object Combinators {
     } yield ()
   }
 
+  def getCategories: Spider3w3n[IndexedSeq[CategoryId]] =
+    for {
+      page ← getPriceIndexPage
+      _ ← setCategoryIdsFromPage(page)
+      state ← getState[State3w3n]
+    } yield state.categoryIds
+
+  def getProductTypes: Spider3w3n[IndexedSeq[(CategoryId, IndexedSeq[ProductId])]] = {
+    getCategories flatMap { categories ⇒
+      val tempList = categories map { category ⇒
+        getProductIdsFromCategoryId(category._1) map { names ⇒
+          (category, names)
+        }
+      }
+      Spider.sequence(tempList)
+    }
+  }
+
   object Setters {
     def setUser(user: User): Spider3w3n[Unit] = {
       changeState(_.copy(user = Some(user)))
@@ -109,12 +129,13 @@ object Combinators {
     }
 
     def setCategoryIdsFromPage(page: String): Spider3w3n[Unit] = {
-      changeState[State3w3n](_.copy(categoryIds = extractCategoryIds(page)))
+      changeState[State3w3n](
+        _.copy(categoryIds = extractCategoryIds(page)))
     }
 
-    def setProductIds(categoryIds: Seq[Int]): Spider3w3n[Unit] = {
-      val spiderSeq = categoryIds.view.map(
-        getProductIdsFromCategoryId(_)).toIndexedSeq
+    def setProductIds(categoryIds: Seq[(Int, String)]): Spider3w3n[Unit] = {
+      val spiderSeq = categoryIds.view.map(tup ⇒
+        getProductIdsFromCategoryId(tup._1)).toIndexedSeq
       for {
         seqseq ← sequence(spiderSeq)
         _ ← changeState[State3w3n](_.copy(typeIds = seqseq.flatten))
@@ -140,7 +161,7 @@ object Combinators {
   }
 
   def getProductIdsFromCategoryId(
-    categoryId: Int): Spider3w3n[IndexedSeq[(Int, String)]] = {
+    categoryId: Int): Spider3w3n[IndexedSeq[ProductId]] = {
     Spider.get[State3w3n](
       URLs.BASE + URLs.SHOW_TYPE_LIST)(
         params = List("pId" -> categoryId.toString))
@@ -151,7 +172,7 @@ object Combinators {
    * @return Spider3w3n[Unit]
    */
   def getProductsAndSink(
-    productIds: Seq[(Int, String)],
+    productIds: Seq[ProductId],
     dates: IndexedSeq[DateTime],
     sink: Sinker) = {
     val spiderSeq = for {

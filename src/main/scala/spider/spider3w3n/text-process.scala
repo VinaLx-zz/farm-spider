@@ -12,6 +12,7 @@ import org.json4s.native.JsonMethods
 import net.ruippeixotog.scalascraper.browser.JsoupBrowser
 import net.ruippeixotog.scalascraper.dsl.DSL._
 import net.ruippeixotog.scalascraper.dsl.DSL.Extract._
+import net.ruippeixotog.scalascraper.model._
 
 import Combinators._
 import TextProcessing._
@@ -23,9 +24,16 @@ object TextProcessing {
     extractorRegex findFirstMatchIn page map (_.group(1)) map (md5Hash(_))
   }
 
-  private[spider3w3n] def extractCategoryIds(page: String): IndexedSeq[Int] = {
-    val extractorRegex = """getProductListByPid\((\d+),""".r
-    (extractorRegex findAllMatchIn page map (_.group(1).toInt)).toIndexedSeq
+  private[spider3w3n] def extractCategoryIds(
+    page: String): IndexedSeq[(Int, String)] = {
+    val categories =
+      JsoupBrowser().parseString(page) >> elementList(".category_item")
+    (categories map { span ⇒
+      val id = ("""\d+""".r findFirstIn span.attr("onclick")).get.toInt
+      (id, span.text)
+    }).toIndexedSeq
+    // val extractorRegex = """getProductListByPid\((\d+),""".r
+    // (extractorRegex findAllMatchIn page map (_.group(1).toInt)).toIndexedSeq
   }
 
   private[spider3w3n] def parseTypeListJson(

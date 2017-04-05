@@ -39,3 +39,17 @@ object FarmTable extends TableQuery(new FarmTable(_)) {
       })
   }
 }
+
+class CategoryTable(tag: Tag)
+  extends Table[(String, String)](tag, Some("farm"), "Category") {
+  def category = column[String]("CATEGORY")
+  def name = column[String]("NAME")
+  def * = (category, name)
+}
+
+object CategoryTable extends TableQuery(new CategoryTable(_)) {
+  def insert(category: String, name: String) = {
+    this += ((category, name))
+  }
+  def clearAll = this.delete
+}

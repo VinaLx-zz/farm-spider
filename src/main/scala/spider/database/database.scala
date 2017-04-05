@@ -19,11 +19,15 @@ object FarmDB {
     import scala.concurrent.ExecutionContext.Implicits.global
     if (config.db.isEmpty) return
     val db = getConnection(config.copy(db = None))
-    val actions = DBIO.seq(
-      createDatabaseSQL(config.db.get), createProductTable)
-    Await.result(db.run(actions) recover {
-      case e ⇒ logger.info(e.getMessage)
-    }, Inf)
+    val actions = Seq(
+      createDatabaseSQL(config.db.get),
+      createProductTable,
+      createCategoryTable)
+    actions map { action ⇒
+      Await.result(db.run(action) recover {
+        case e ⇒ logger.info(e.getMessage)
+      }, Inf)
+    }
   }
 
   def getConnection(config: DBConfig): Database = {
@@ -46,6 +50,7 @@ object FarmDB {
   }
 
   def createProductTable = FarmTable.schema.create
+  def createCategoryTable = CategoryTable.schema.create
 
   implicit class SyncDB(db: Database) {
     def runSync[R](a: DBIOAction[R, NoStream, Nothing])(

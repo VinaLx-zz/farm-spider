@@ -15,6 +15,7 @@ object CLI {
     case "wait" +: tail ⇒ Wait(tail)
     case "help" +: tail ⇒ Help(tail)
     case "remove" +: tail ⇒ Remove(tail)
+    case "getcat" +: tail ⇒ GetCategory(tail)
     case other +: tail ⇒ errorExit(s"unknown command $other")
   }
 }

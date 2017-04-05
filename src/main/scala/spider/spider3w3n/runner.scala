@@ -87,6 +87,19 @@ object Runner {
     datesList map (dates ⇒ getSpider(user, dates.toIndexedSeq, sink))
   }
 
+  def getCategories(db: Database): Unit = {
+    import scala.concurrent.ExecutionContext.Implicits.global
+    db.runSync(CategoryTable.clearAll)
+    (getProductTypes map { categories ⇒
+      for {
+        ((catId, catName), productIds) ← categories
+        _ ← for {
+          (productId, productName) ← productIds
+        } yield db.runSync(CategoryTable.insert(catName, productName))
+      } yield ()
+    }).run(State3w3n())
+  }
+
   private def runSpiderAsync(s: Spider3w3n[Unit])(
     implicit ec: ExecutionContext): Future[Unit] = Future {
     s run State3w3n()
