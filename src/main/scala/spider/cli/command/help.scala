@@ -48,10 +48,21 @@ object Help {
         |
         |        for the format for database configuration, see example db.json
       """.stripMargin
+
+  lazy val getcatUsage =
+    """getcat -- update categories of product in the database
+       |run getcat [--config path]
+       |    options:
+       |        --config: path to database configuration file, default to ./db.json
+       |    note:
+       |        for the format for database configuration, see example db.json
+    """.stripMargin
   def apply(args: Seq[String]): Unit = args match {
     case e if args.isEmpty ⇒ println(usage)
     case "wait" +: ignore ⇒ println(waitUsage)
     case "remove" +: ignore ⇒ println(removeUsage)
     case "scrape" +: ignore ⇒ println(scrapeUsage)
+    case "getcat" +: ignore ⇒ println(getcatUsage)
+    case other +: ignore ⇒ println(s"$usage\nunknown command $other")
   }
 }
