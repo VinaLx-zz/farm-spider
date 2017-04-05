@@ -17,9 +17,14 @@ object Wait {
     user: Args[User] = UserArg(),
     config: Args[DBConfig] = ConfigArg())
 
-  case class TimeOfDay(hour: Int, minute: Int, second: Int)
+  case class TimeOfDay(hour: Int, minute: Int, second: Int) {
+    def toToday: DateTime = {
+      DateTime.now.hour(hour).minute(minute).second(second)
+    }
+  }
 
-  val wakeUpTimes = Seq(TimeOfDay(12, 0, 0), TimeOfDay(21, 0, 0))
+  val wakeUpTimes = Seq(
+    TimeOfDay(12, 0, 0), TimeOfDay(23, 0, 0))
 
   private def parseArgs(args: Seq[String]): WaitArgs = {
     @annotation.tailrec
@@ -61,14 +66,21 @@ object Wait {
     wakeUp(db, user)
   }
 
+  private def chooseTimeOfDay(from: DateTime): TimeOfDay = {
+    wakeUpTimes find (_.toToday > from) match {
+      case Some(d) ⇒ d
+      case None ⇒ wakeUpTimes.head
+    }
+  }
+
+  private def chooseWakeUpTime(from: DateTime): DateTime = {
+    nextWakeUp(from, chooseTimeOfDay(from))
+  }
+
   private def wait(db: Database, user: User): Unit = {
     while (true) {
-      for {
-        timeOfDay ← wakeUpTimes
-      } {
-        val nextTime = nextWakeUp(DateTime.now, timeOfDay)
-        waitOne(db, user, nextTime)
-      }
+      val next = chooseWakeUpTime(DateTime.now)
+      waitOne(db, user, next)
     }
   }
 
