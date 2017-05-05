@@ -56,9 +56,11 @@ object Wait {
 
   private def wakeUp(db: Database, user: User) = {
     val time = DateTime.now
-    logger.info(s"start scraping records of ${toFormatString(time)}")
-    Scrape.scrapeOne(db, user, time)
-    logger.info(s"${toFormatString(time)} finish")
+    val yesterday = time - 1.day;
+    logger.info(
+      s"start scraping ${toFormatString(time)}, ${toFormatString(yesterday)}")
+    Scrape.scrape(db, user, IndexedSeq(time, yesterday), 2)
+    logger.info(s"${toFormatString(time)}, ${toFormatString(yesterday)} finish")
   }
 
   private def waitOne(db: Database, user: User, wakeUpTime: DateTime) = {
