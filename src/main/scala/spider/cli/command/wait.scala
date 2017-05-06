@@ -56,11 +56,11 @@ object Wait {
 
   private def wakeUp(db: Database, user: User) = {
     val time = DateTime.now
-    val yesterday = time - 1.day;
+    val before = time - 3.day;
     logger.info(
-      s"start scraping ${toFormatString(time)}, ${toFormatString(yesterday)}")
-    Scrape.scrape(db, user, IndexedSeq(time, yesterday), 2)
-    logger.info(s"${toFormatString(time)}, ${toFormatString(yesterday)} finish")
+      s"start scraping ${toFormatString(time)}, ${toFormatString(before)}")
+    Scrape.scrape(db, user, IndexedSeq(time, before), 2)
+    logger.info(s"${toFormatString(time)}, ${toFormatString(before)} finish")
   }
 
   private def waitOne(db: Database, user: User, wakeUpTime: DateTime) = {
